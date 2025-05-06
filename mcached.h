@@ -16,16 +16,17 @@
 #define RES_EXISTS     0x0002
 #define RES_ERROR      0x0004
 
+/* struct for memcached request header */
 typedef struct {
-    uint8_t magic;
-    uint8_t opcode;
-    uint16_t key_length;
-    uint8_t extras_length;
-    uint8_t data_type;
-    uint16_t vbucket_id;
-    uint32_t total_body_length;
-    uint32_t opaque;
-    uint64_t cas;
+    uint8_t magic; // 0x81 to identify a cached header
+    uint8_t opcode; // command or response code 
+    uint16_t key_length; // length of key in bytes
+    uint8_t extras_length; // additional expansion field 
+    uint8_t data_type; // data type 
+    uint16_t vbucket_id; // virtual bucket number
+    uint32_t total_body_length; // length of data in bytes
+    uint32_t opaque; // used to match response with request
+    uint64_t cas; // compare and set token 
 } __attribute__((packed)) memcache_req_header_t;
 
 #endif
