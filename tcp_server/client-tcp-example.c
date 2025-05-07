@@ -1,11 +1,4 @@
 
-
-static char ibmcopyr[] =
-   "TCPC     - Licensed Materials - Property of IBM. "
-   "This module is \"Restricted Materials of IBM\" "
-   "5647-A01 (C) Copyright IBM Corp. 1996. "
-   "See IBM Copyright Instructions.";
-
 /*
  * Include Files.
  */
@@ -78,7 +71,7 @@ int main(int argc, char ** argv) {
     }
 
     /*
-     * Connect to the server.
+     * Connect to the server. 
      */
     if (connect(socketFD, (struct sockaddr *)&server, sizeof(server)) < 0)
     {

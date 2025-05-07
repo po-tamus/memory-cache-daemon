@@ -1,6 +1,4 @@
-/* modifed code from
-  https://www.ibm.com/docs/en/zos/2.4.0?topic=programs-c-socket-tcp-server:
- */ 
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,8 +52,9 @@ char **argv;
         exit(2);
     }
 
-    /*
-     * Bind the socket to the server address.
+    /**
+     * bind the socket to the server address 
+     * let the OS pick the IP address 
      */
     server_addr.sin_family = AF_INET;
     server_addr.sin_port   = htons(port);
