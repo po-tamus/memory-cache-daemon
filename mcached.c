@@ -1,4 +1,3 @@
-
 #define _POSIX_C_SOURCE 199309L
 
 #include <stdio.h>
@@ -14,7 +13,6 @@
 #include <sys/types.h>
 
 #include "uthash.h"
-
 #include "mcached.h"
 
 #define PORT 11211
@@ -32,8 +30,7 @@ typedef struct cache_entry {
 
 cache_entry_t *cache_table = NULL;
 pthread_mutex_t table_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-int server_fd;  // global server socket fd
+int server_fd;
 
 cache_entry_t *find_entry(const char *key, size_t key_len) {
     cache_entry_t *entry;
@@ -58,7 +55,7 @@ void handle_get(int client_fd, memcache_req_header_t *hdr, uint8_t *key) {
 
     write(client_fd, &resp, sizeof(resp));
     if (entry) {
-        write(client_fd, key, key_len); // echo key
+        write(client_fd, key, key_len);
         write(client_fd, entry->value, entry->value_len);
         pthread_mutex_unlock(&entry->lock);
     }
@@ -86,7 +83,6 @@ void handle_set(int client_fd, memcache_req_header_t *hdr, uint8_t *key, uint8_t
     pthread_mutex_lock(&entry->lock);
     pthread_mutex_unlock(&table_mutex);
 
-    // Replace value
     free(entry->value);
     entry->value = malloc(value_len);
     memcpy(entry->value, value, value_len);
@@ -100,7 +96,6 @@ void handle_set(int client_fd, memcache_req_header_t *hdr, uint8_t *key, uint8_t
         .vbucket_id = htons(RES_OK),
         .total_body_length = htonl(0),
     };
-
     write(client_fd, &resp, sizeof(resp));
 }
 
@@ -129,11 +124,9 @@ void handle_add(int client_fd, memcache_req_header_t *hdr, uint8_t *key, uint8_t
     memcpy(entry->key, key, key_len);
     entry->key_len = key_len;
     pthread_mutex_init(&entry->lock, NULL);
-
     entry->value = malloc(value_len);
     memcpy(entry->value, value, value_len);
     entry->value_len = value_len;
-
     HASH_ADD_KEYPTR(hh, cache_table, entry->key, key_len, entry);
     pthread_mutex_unlock(&table_mutex);
 
@@ -166,7 +159,7 @@ void handle_delete(int client_fd, memcache_req_header_t *hdr, uint8_t *key) {
 
     pthread_mutex_lock(&entry->lock);
     HASH_DEL(cache_table, entry);
-    pthread_mutex_unlock(&table_mutex); // done with table
+    pthread_mutex_unlock(&table_mutex);
 
     pthread_mutex_destroy(&entry->lock);
     free(entry->key);
@@ -201,7 +194,7 @@ void handle_output(int client_fd, memcache_req_header_t *req_hdr) {
     pthread_mutex_lock(&table_mutex);
 
     struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
+    clock_gettime(CLOCK_REALTIME, &ts);
 
     cache_entry_t *entry, *tmp;
     for (entry = cache_table; entry != NULL; entry = tmp) {
@@ -209,14 +202,12 @@ void handle_output(int client_fd, memcache_req_header_t *req_hdr) {
 
         pthread_mutex_lock(&entry->lock);
         printf("%08lx:%08lx:", ts.tv_sec, ts.tv_nsec);
-
         for (size_t i = 0; i < entry->key_len; i++)
             printf("%02x", (unsigned char)entry->key[i]);
         printf(":");
         for (size_t i = 0; i < entry->value_len; i++)
             printf("%02x", ((unsigned char *)entry->value)[i]);
         printf("\n");
-
         pthread_mutex_unlock(&entry->lock);
     }
 
@@ -242,21 +233,12 @@ void send_error_response(int client_fd, uint8_t opcode) {
     write(client_fd, &resp, sizeof(resp));
 }
 
-
 void handle_client(int client_fd) {
     memcache_req_header_t hdr;
-    ssize_t n = read(client_fd, &hdr, sizeof(hdr));
+    ssize_t n = recv(client_fd, &hdr, sizeof(hdr), MSG_WAITALL);
 
-    if (n != sizeof(hdr)) {
-        fprintf(stderr, "Error: incomplete or invalid header (read %zd bytes).\n", n);
-        close(client_fd);
-        return;
-    }
-
-    // Only support request magic
-    if (hdr.magic != 0x80) {
+    if (n != sizeof(hdr) || hdr.magic != 0x80) {
         send_error_response(client_fd, hdr.opcode);
-        close(client_fd);
         return;
     }
 
@@ -266,11 +248,9 @@ void handle_client(int client_fd) {
     uint8_t *body = NULL;
     if (total_len > 0) {
         body = malloc(total_len);
-        ssize_t body_read = read(client_fd, body, total_len);
+        ssize_t body_read = recv(client_fd, body, total_len, MSG_WAITALL);
         if (body_read != total_len) {
-            fprintf(stderr, "Error: body read incomplete (%zd/%u).\n", body_read, total_len);
             free(body);
-            close(client_fd);
             return;
         }
     }
@@ -279,27 +259,13 @@ void handle_client(int client_fd) {
     uint8_t *value = (key_len > 0) ? (body + key_len) : NULL;
 
     switch (hdr.opcode) {
-        case CMD_GET:
-            handle_get(client_fd, &hdr, key);
-            break;
-        case CMD_SET:
-            handle_set(client_fd, &hdr, key, value);
-            break;
-        case CMD_ADD:
-            handle_add(client_fd, &hdr, key, value);
-            break;
-        case CMD_DELETE:
-            handle_delete(client_fd, &hdr, key);
-            break;
-        case CMD_VERSION:
-            handle_version(client_fd, &hdr);
-            break;
-        case CMD_OUTPUT:
-            handle_output(client_fd, &hdr);
-            break;
-        default:
-            send_error_response(client_fd, hdr.opcode);
-            break;
+        case CMD_GET:     handle_get(client_fd, &hdr, key); break;
+        case CMD_SET:     handle_set(client_fd, &hdr, key, value); break;
+        case CMD_ADD:     handle_add(client_fd, &hdr, key, value); break;
+        case CMD_DELETE:  handle_delete(client_fd, &hdr, key); break;
+        case CMD_VERSION: handle_version(client_fd, &hdr); break;
+        case CMD_OUTPUT:  handle_output(client_fd, &hdr); break;
+        default:          send_error_response(client_fd, hdr.opcode); break;
     }
 
     if (body) free(body);
@@ -311,7 +277,6 @@ void *worker_thread(void *arg) {
         socklen_t addrlen = sizeof(client_addr);
         int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addrlen);
         if (client_fd < 0) continue;
-
         handle_client(client_fd);
         close(client_fd);
     }
