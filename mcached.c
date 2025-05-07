@@ -1,8 +1,11 @@
+
+#define _POSIX_C_SOURCE 199309L
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
+#include <time.h>
 #include <pthread.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -13,16 +16,15 @@
 #include "uthash.h"
 
 #include "mcached.h"
-//--------------------------
-#include <time.h>
 
-
+#define PORT 11211
 #define MAX_THREADS 128
 #define BACKLOG 10
 
 typedef struct cache_entry {
     char *key;
     void *value;
+    size_t key_len; 
     size_t value_len;
     pthread_mutex_t lock;
     UT_hash_handle hh;
@@ -56,7 +58,7 @@ void handle_get(int client_fd, memcache_req_header_t *hdr, uint8_t *key) {
 
     write(client_fd, &resp, sizeof(resp));
     if (entry) {
-        write(client_fd, key, key_len);                // echo key
+        write(client_fd, key, key_len); // echo key
         write(client_fd, entry->value, entry->value_len);
         pthread_mutex_unlock(&entry->lock);
     }
@@ -198,8 +200,8 @@ void handle_version(int client_fd, memcache_req_header_t *req_hdr) {
 void handle_output(int client_fd, memcache_req_header_t *req_hdr) {
     pthread_mutex_lock(&table_mutex);
 
-    // struct timespec ts;
-    // clock_gettime(CLOCK_REALTIME, &ts);
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
 
     cache_entry_t *entry, *tmp;
     for (entry = cache_table; entry != NULL; entry = tmp) {
@@ -241,7 +243,6 @@ void send_error_response(int client_fd, uint8_t opcode) {
 }
 
 
-// ------------------- Client Handler -------------------------
 void handle_client(int client_fd) {
     memcache_req_header_t hdr;
     ssize_t n = read(client_fd, &hdr, sizeof(hdr));
@@ -304,7 +305,6 @@ void handle_client(int client_fd) {
     if (body) free(body);
 }
 
-// ------------------- Worker Thread --------------------------
 void *worker_thread(void *arg) {
     while (1) {
         struct sockaddr_in client_addr;
@@ -318,7 +318,6 @@ void *worker_thread(void *arg) {
     return NULL;
 }
 
-// ------------------- Server Init ----------------------------
 int setup_server_socket(int port) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == -1) {
@@ -348,7 +347,6 @@ int setup_server_socket(int port) {
     return sock;
 }
 
-// ------------------- Main -----------------------------------
 int main(int argc, char *argv[]) {
     if (argc != 3) {
         fprintf(stderr, "Usage: %s <port> <num_threads>\n", argv[0]);
